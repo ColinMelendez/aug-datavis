@@ -1,4 +1,9 @@
-# Some Matplotlib Data Visualizations
+# Data Visualization Experiments
+
+Some experiments with 3d wireframe data visualizations for a project.
+
+Scripts and notebooks are not modular at the moment, but the actual plotting logic in them
+is wrapped in functions that can be easily extracted.
 
 ## Quick Start
 
