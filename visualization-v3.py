@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.colors import LinearSegmentedColormap
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 
 def plot_data(
@@ -37,14 +38,19 @@ def plot_data(
     print(f"Z-axis range: {z_min:.2f} to {z_max:.2f}")
     print(f"{z_split_pct * 100:.0f}% split point: z = {z_split_val:.2f}")
 
-    def plot_x_line_with_split(x_coords, y_coords, z_coords):
-        """Plot X-direction line: gradient based on X, hue based on Z region."""
+    # Collect all segments and colors for batch rendering
+    all_segments = []
+    all_colors = []
+
+    def collect_x_line_segments(x_coords, y_coords, z_coords):
+        """
+        Collect X-direction line segments with colors.
+        """
         for i in range(len(x_coords) - 1):
             x0, x1 = x_coords[i], x_coords[i + 1]
             y0, y1 = y_coords[i], y_coords[i + 1]
             z0, z1 = z_coords[i], z_coords[i + 1]
 
-            # X position determines gradient position
             x_mid = (x0 + x1) / 2
             t_x = (x_mid - x_min) / (x_max - x_min) if x_max > x_min else 0.5
 
@@ -53,16 +59,9 @@ def plot_data(
 
             if below_0 == below_1:
                 cmap = cmap_x_below if below_0 else cmap_x_above
-                ax.plot(
-                    [x0, x1],
-                    [y0, y1],
-                    [z0, z1],
-                    color=cmap(t_x),
-                    linewidth=1.5,
-                    alpha=0.9,
-                )
+                all_segments.append([(x0, y0, z0), (x1, y1, z1)])
+                all_colors.append(cmap(t_x))
             else:
-                # Segment crosses threshold
                 t = (z_split_val - z0) / (z1 - z0)
                 x_cross = x0 + t * (x1 - x0)
                 y_cross = y0 + t * (y1 - y0)
@@ -72,48 +71,25 @@ def plot_data(
                 t_x2 = ((x_cross + x1) / 2 - x_min) / (x_max - x_min)
 
                 if below_0:
-                    ax.plot(
-                        [x0, x_cross],
-                        [y0, y_cross],
-                        [z0, z_cross],
-                        color=cmap_x_below(t_x1),
-                        linewidth=1.5,
-                        alpha=0.9,
-                    )
-                    ax.plot(
-                        [x_cross, x1],
-                        [y_cross, y1],
-                        [z_cross, z1],
-                        color=cmap_x_above(t_x2),
-                        linewidth=1.5,
-                        alpha=0.9,
-                    )
+                    all_segments.append([(x0, y0, z0), (x_cross, y_cross, z_cross)])
+                    all_colors.append(cmap_x_below(t_x1))
+                    all_segments.append([(x_cross, y_cross, z_cross), (x1, y1, z1)])
+                    all_colors.append(cmap_x_above(t_x2))
                 else:
-                    ax.plot(
-                        [x0, x_cross],
-                        [y0, y_cross],
-                        [z0, z_cross],
-                        color=cmap_x_above(t_x1),
-                        linewidth=1.5,
-                        alpha=0.9,
-                    )
-                    ax.plot(
-                        [x_cross, x1],
-                        [y_cross, y1],
-                        [z_cross, z1],
-                        color=cmap_x_below(t_x2),
-                        linewidth=1.5,
-                        alpha=0.9,
-                    )
+                    all_segments.append([(x0, y0, z0), (x_cross, y_cross, z_cross)])
+                    all_colors.append(cmap_x_above(t_x1))
+                    all_segments.append([(x_cross, y_cross, z_cross), (x1, y1, z1)])
+                    all_colors.append(cmap_x_below(t_x2))
 
-    def plot_y_line_with_split(x_coords, y_coords, z_coords):
-        """Plot Y-direction line: gradient based on Y, hue based on Z region."""
+    def collect_y_line_segments(x_coords, y_coords, z_coords):
+        """
+        Collect Y-direction line segments with colors.
+        """
         for i in range(len(y_coords) - 1):
             x0, x1 = x_coords[i], x_coords[i + 1]
             y0, y1 = y_coords[i], y_coords[i + 1]
             z0, z1 = z_coords[i], z_coords[i + 1]
 
-            # Y position determines gradient position
             y_mid = (y0 + y1) / 2
             t_y = (y_mid - y_min) / (y_max - y_min) if y_max > y_min else 0.5
 
@@ -121,17 +97,12 @@ def plot_data(
             below_1 = z1 < z_split_val
 
             if below_0 == below_1:
+                # Entire segment on one side - use midpoint for color
                 cmap = cmap_y_below if below_0 else cmap_y_above
-                ax.plot(
-                    [x0, x1],
-                    [y0, y1],
-                    [z0, z1],
-                    color=cmap(t_y),
-                    linewidth=1.5,
-                    alpha=0.9,
-                )
+                all_segments.append([(x0, y0, z0), (x1, y1, z1)])
+                all_colors.append(cmap(t_y))
             else:
-                # Segment crosses threshold
+                # Segment crosses threshold - interpolate crossing point
                 t = (z_split_val - z0) / (z1 - z0)
                 x_cross = x0 + t * (x1 - x0)
                 y_cross = y0 + t * (y1 - y0)
@@ -140,48 +111,32 @@ def plot_data(
                 t_y1 = ((y0 + y_cross) / 2 - y_min) / (y_max - y_min)
                 t_y2 = ((y_cross + y1) / 2 - y_min) / (y_max - y_min)
 
+                # Collect both segments with colors
                 if below_0:
-                    ax.plot(
-                        [x0, x_cross],
-                        [y0, y_cross],
-                        [z0, z_cross],
-                        color=cmap_y_below(t_y1),
-                        linewidth=1.5,
-                        alpha=0.9,
-                    )
-                    ax.plot(
-                        [x_cross, x1],
-                        [y_cross, y1],
-                        [z_cross, z1],
-                        color=cmap_y_above(t_y2),
-                        linewidth=1.5,
-                        alpha=0.9,
-                    )
+                    all_segments.append([(x0, y0, z0), (x_cross, y_cross, z_cross)])
+                    all_colors.append(cmap_y_below(t_y1))
+                    all_segments.append([(x_cross, y_cross, z_cross), (x1, y1, z1)])
+                    all_colors.append(cmap_y_above(t_y2))
                 else:
-                    ax.plot(
-                        [x0, x_cross],
-                        [y0, y_cross],
-                        [z0, z_cross],
-                        color=cmap_y_above(t_y1),
-                        linewidth=1.5,
-                        alpha=0.9,
-                    )
-                    ax.plot(
-                        [x_cross, x1],
-                        [y_cross, y1],
-                        [z_cross, z1],
-                        color=cmap_y_below(t_y2),
-                        linewidth=1.5,
-                        alpha=0.9,
-                    )
+                    all_segments.append([(x0, y0, z0), (x_cross, y_cross, z_cross)])
+                    all_colors.append(cmap_y_above(t_y1))
+                    all_segments.append([(x_cross, y_cross, z_cross), (x1, y1, z1)])
+                    all_colors.append(cmap_y_below(t_y2))
 
-    # Plot X-direction lines (rows)
+    # Collect all segments
     for i in range(X.shape[0]):
-        plot_x_line_with_split(X[i, :], Y[i, :], Z[i, :])
-
-    # Plot Y-direction lines (columns)
+        collect_x_line_segments(X[i, :], Y[i, :], Z[i, :])
     for j in range(X.shape[1]):
-        plot_y_line_with_split(X[:, j], Y[:, j], Z[:, j])
+        collect_y_line_segments(X[:, j], Y[:, j], Z[:, j])
+
+    # Create a single Line3DCollection for all segments
+    line_collection = Line3DCollection(all_segments, colors=all_colors, linewidths=1.5)
+    ax.add_collection3d(line_collection)
+
+    # Set axis limits
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+    ax.set_zlim(z_min, z_max)
 
     # Add labels and title
     ax.set_xlabel("X Axis", fontsize=12)

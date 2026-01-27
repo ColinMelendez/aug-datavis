@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.colors import LinearSegmentedColormap
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 
 def plot_data(
@@ -33,8 +34,14 @@ def plot_data(
     print(f"Z-axis range: {z_min:.2f} to {z_max:.2f}")
     print(f"{z_split_pct * 100:.0f}% split point: z = {z_split_val:.2f}")
 
+    # Collect all segments and colors for batch rendering
+    all_segments = []
+    all_colors = []
+
     def get_gradient_color(z_val, is_below, cmap_below, cmap_above):
-        """Get color from gradient based on z position within region."""
+        """
+        Get color from gradient based on z position within region.
+        """
         if is_below:
             t = (z_val - z_min) / (z_split_val - z_min) if z_split_val > z_min else 0.5
         else:
@@ -47,8 +54,10 @@ def plot_data(
         cmap = cmap_below if is_below else cmap_above
         return cmap(t)
 
-    def plot_line_with_split(x_coords, y_coords, z_coords, cmap_below, cmap_above):
-        """Plot a line with sharp color transition and gradients."""
+    def collect_line_segments(x_coords, y_coords, z_coords, cmap_below, cmap_above):
+        """
+        Collect line segments with colors for batch rendering.
+        """
         for i in range(len(x_coords) - 1):
             x0, x1 = x_coords[i], x_coords[i + 1]
             y0, y1 = y_coords[i], y_coords[i + 1]
@@ -58,17 +67,19 @@ def plot_data(
             below_1 = z1 < z_split_val
 
             if below_0 == below_1:
+                # Entire segment on one side - use midpoint for color
                 z_mid = (z0 + z1) / 2
                 color = get_gradient_color(z_mid, below_0, cmap_below, cmap_above)
-                ax.plot(
-                    [x0, x1], [y0, y1], [z0, z1], color=color, linewidth=1.5, alpha=0.9
-                )
+                all_segments.append([(x0, y0, z0), (x1, y1, z1)])
+                all_colors.append(color)
             else:
+                # Segment crosses threshold - interpolate crossing point
                 t = (z_split_val - z0) / (z1 - z0)
                 x_cross = x0 + t * (x1 - x0)
                 y_cross = y0 + t * (y1 - y0)
                 z_cross = z_split_val
 
+                # Collect both segments with gradient colors
                 if below_0:
                     color1 = get_gradient_color(
                         (z0 + z_cross) / 2, True, cmap_below, cmap_above
@@ -83,30 +94,25 @@ def plot_data(
                     color2 = get_gradient_color(
                         (z_cross + z1) / 2, True, cmap_below, cmap_above
                     )
-                ax.plot(
-                    [x0, x_cross],
-                    [y0, y_cross],
-                    [z0, z_cross],
-                    color=color1,
-                    linewidth=1.5,
-                    alpha=0.9,
-                )
-                ax.plot(
-                    [x_cross, x1],
-                    [y_cross, y1],
-                    [z_cross, z1],
-                    color=color2,
-                    linewidth=1.5,
-                    alpha=0.9,
-                )
+                all_segments.append([(x0, y0, z0), (x_cross, y_cross, z_cross)])
+                all_colors.append(color1)
+                all_segments.append([(x_cross, y_cross, z_cross), (x1, y1, z1)])
+                all_colors.append(color2)
 
-    # Plot X-direction lines (rows)
+    # Collect all segments
     for i in range(X.shape[0]):
-        plot_line_with_split(X[i, :], Y[i, :], Z[i, :], cmap_x_below, cmap_x_above)
-
-    # Plot Y-direction lines (columns)
+        collect_line_segments(X[i, :], Y[i, :], Z[i, :], cmap_x_below, cmap_x_above)
     for j in range(X.shape[1]):
-        plot_line_with_split(X[:, j], Y[:, j], Z[:, j], cmap_y_below, cmap_y_above)
+        collect_line_segments(X[:, j], Y[:, j], Z[:, j], cmap_y_below, cmap_y_above)
+
+    # Create a single Line3DCollection for all segments
+    line_collection = Line3DCollection(all_segments, colors=all_colors, linewidths=1.5)
+    ax.add_collection3d(line_collection)
+
+    # Set axis limits
+    ax.set_xlim(X.min(), X.max())
+    ax.set_ylim(Y.min(), Y.max())
+    ax.set_zlim(z_min, z_max)
 
     # Add labels and title
     ax.set_xlabel("X Axis", fontsize=12)
