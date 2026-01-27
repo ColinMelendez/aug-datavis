@@ -1,3 +1,7 @@
+import matplotlib
+
+matplotlib.use("QtAgg")
+from matplotlib.collections import PolyCollection
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -149,12 +153,11 @@ def plot_data(
     )
 
     # Add a horizontal plane indicator at the split point
-    x_range = [X.min(), X.max()]
-    y_range = [Y.min(), Y.max()]
-    plane_x = np.array([[x_range[0], x_range[0]], [x_range[1], x_range[1]]])
-    plane_y = np.array([[y_range[0], y_range[1]], [y_range[0], y_range[1]]])
-    plane_z = np.array([[z_split_val, z_split_val], [z_split_val, z_split_val]])
-    ax.plot_surface(plane_x, plane_y, plane_z, alpha=0.15, color="gray")
+    verts = [
+        [(X.min(), Y.min()), (X.max(), Y.min()), (X.max(), Y.max()), (X.min(), Y.max())]
+    ]
+    plane = PolyCollection(verts, alpha=0.15, facecolors="gray", edgecolors="none")
+    ax.add_collection3d(plane, zs=z_split_val, zdir="z")
 
     # Add legend
     legend_elements = [
@@ -215,6 +218,10 @@ def plot_data(
     # display the plot
     plt.tight_layout()
     plt.show()
+
+    # Check for QtAgg backend
+    backend = matplotlib.get_backend()
+    print(f" Using backend: {backend}")
 
     # return figure and axis references for any further manipulation
     return fig, ax
