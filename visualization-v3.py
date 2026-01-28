@@ -42,103 +42,217 @@ def plot_data(
     print(f"Z-axis range: {z_min:.2f} to {z_max:.2f}")
     print(f"{z_split_pct * 100:.0f}% split point: z = {z_split_val:.2f}")
 
-    # Convert main arrays once
-    X_arr = np.asarray(X)
-    Y_arr = np.asarray(Y)
-    Z_arr = np.asarray(Z)
+    # Pre-calculate ranges (avoid division by zero)
+    x_range = x_max - x_min if x_max > x_min else 1.0
+    y_range = y_max - y_min if y_max > y_min else 1.0
 
-    # Pre-allocate arrays for segments and colors
-    all_segments = []
-    all_colors = []
-
-    def collect_x_line_segments(x_coords, y_coords, z_coords):
+    def process_x_direction_segments(X_arr, Y_arr, Z_arr):
         """
-        Collect X-direction line segments with colors.
+        Process all X-direction segments.
+        Color varies with X position.
         """
-        for i in range(len(x_coords) - 1):
-            x0, x1 = x_coords[i], x_coords[i + 1]
-            y0, y1 = y_coords[i], y_coords[i + 1]
-            z0, z1 = z_coords[i], z_coords[i + 1]
+        # X-direction: shape (rows, cols) -> segments along cols
+        x0 = X_arr[:, :-1].ravel()
+        x1 = X_arr[:, 1:].ravel()
+        y0 = Y_arr[:, :-1].ravel()
+        y1 = Y_arr[:, 1:].ravel()
+        z0 = Z_arr[:, :-1].ravel()
+        z1 = Z_arr[:, 1:].ravel()
 
-            x_mid = (x0 + x1) / 2
-            t_x = (x_mid - x_min) / (x_max - x_min) if x_max > x_min else 0.5
+        n_segments = len(x0)
 
-            below_0 = z0 < z_split_val
-            below_1 = z1 < z_split_val
+        # Vectorized threshold checking
+        below_0 = z0 < z_split_val
+        below_1 = z1 < z_split_val
+        same_side = below_0 == below_1
+        cross_mask = ~same_side
 
-            if below_0 == below_1:
-                cmap = cmap_x_below if below_0 else cmap_x_above
-                all_segments.append([(x0, y0, z0), (x1, y1, z1)])
-                all_colors.append(cmap(t_x))
-            else:
-                t = (z_split_val - z0) / (z1 - z0)
-                x_cross = x0 + t * (x1 - x0)
-                y_cross = y0 + t * (y1 - y0)
-                z_cross = z_split_val
+        # Count segments (crossing segments produce 2 each)
+        n_cross = np.sum(cross_mask)
+        n_same = n_segments - n_cross
+        total_output = n_same + 2 * n_cross
 
-                t_x1 = ((x0 + x_cross) / 2 - x_min) / (x_max - x_min)
-                t_x2 = ((x_cross + x1) / 2 - x_min) / (x_max - x_min)
+        # Preallocate output arrays
+        segments = np.empty((total_output, 2, 3), dtype=np.float64)
+        colors = np.empty((total_output, 4), dtype=np.float64)
 
-                if below_0:
-                    all_segments.append([(x0, y0, z0), (x_cross, y_cross, z_cross)])
-                    all_colors.append(cmap_x_below(t_x1))
-                    all_segments.append([(x_cross, y_cross, z_cross), (x1, y1, z1)])
-                    all_colors.append(cmap_x_above(t_x2))
-                else:
-                    all_segments.append([(x0, y0, z0), (x_cross, y_cross, z_cross)])
-                    all_colors.append(cmap_x_above(t_x1))
-                    all_segments.append([(x_cross, y_cross, z_cross), (x1, y1, z1)])
-                    all_colors.append(cmap_x_below(t_x2))
+        # Process same-side segments
+        if n_same > 0:
+            same_idx = np.where(same_side)[0]
+            is_below = below_0[same_idx]
 
-    def collect_y_line_segments(x_coords, y_coords, z_coords):
+            # Compute t values based on X position
+            x_mid = (x0[same_idx] + x1[same_idx]) / 2
+            t_x = (x_mid - x_min) / x_range
+
+            # Get colors from appropriate colormaps
+            colors_below = cmap_x_below(t_x)
+            colors_above = cmap_x_above(t_x)
+            same_colors = np.where(is_below[:, np.newaxis], colors_below, colors_above)
+
+            # Build segments
+            segments[:n_same, 0, 0] = x0[same_idx]
+            segments[:n_same, 0, 1] = y0[same_idx]
+            segments[:n_same, 0, 2] = z0[same_idx]
+            segments[:n_same, 1, 0] = x1[same_idx]
+            segments[:n_same, 1, 1] = y1[same_idx]
+            segments[:n_same, 1, 2] = z1[same_idx]
+            colors[:n_same] = same_colors
+
+        # Process crossing segments
+        if n_cross > 0:
+            cross_idx = np.where(cross_mask)[0]
+            x0_c, x1_c = x0[cross_idx], x1[cross_idx]
+            y0_c, y1_c = y0[cross_idx], y1[cross_idx]
+            z0_c, z1_c = z0[cross_idx], z1[cross_idx]
+            below_0_c = below_0[cross_idx]
+
+            # Calculate crossing points
+            t = (z_split_val - z0_c) / (z1_c - z0_c)
+            x_cross = x0_c + t * (x1_c - x0_c)
+            y_cross = y0_c + t * (y1_c - y0_c)
+
+            # Compute t values for X position
+            t_x1 = ((x0_c + x_cross) / 2 - x_min) / x_range
+            t_x2 = ((x_cross + x1_c) / 2 - x_min) / x_range
+
+            # First sub-segment colors
+            colors_1_below = cmap_x_below(t_x1)
+            colors_1_above = cmap_x_above(t_x1)
+            cross_colors_1 = np.where(
+                below_0_c[:, np.newaxis], colors_1_below, colors_1_above
+            )
+
+            # Second sub-segment colors (opposite side)
+            colors_2_below = cmap_x_below(t_x2)
+            colors_2_above = cmap_x_above(t_x2)
+            cross_colors_2 = np.where(
+                ~below_0_c[:, np.newaxis], colors_2_below, colors_2_above
+            )
+
+            # Build crossing segments
+            base_idx = n_same
+            for i in range(n_cross):
+                idx1 = base_idx + 2 * i
+                idx2 = base_idx + 2 * i + 1
+
+                segments[idx1, 0] = [x0_c[i], y0_c[i], z0_c[i]]
+                segments[idx1, 1] = [x_cross[i], y_cross[i], z_split_val]
+                colors[idx1] = cross_colors_1[i]
+
+                segments[idx2, 0] = [x_cross[i], y_cross[i], z_split_val]
+                segments[idx2, 1] = [x1_c[i], y1_c[i], z1_c[i]]
+                colors[idx2] = cross_colors_2[i]
+
+        return segments, colors
+
+    def process_y_direction_segments(X_arr, Y_arr, Z_arr):
         """
-        Collect Y-direction line segments with colors.
+        Process all Y-direction segments.
+        Color varies with Y position.
         """
-        # Arrays are already converted to numpy at function start
+        # Y-direction: shape (rows, cols) -> segments along rows
+        x0 = X_arr[:-1, :].ravel()
+        x1 = X_arr[1:, :].ravel()
+        y0 = Y_arr[:-1, :].ravel()
+        y1 = Y_arr[1:, :].ravel()
+        z0 = Z_arr[:-1, :].ravel()
+        z1 = Z_arr[1:, :].ravel()
 
-        for i in range(len(y_coords) - 1):
-            x0, x1 = x_coords[i], x_coords[i + 1]
-            y0, y1 = y_coords[i], y_coords[i + 1]
-            z0, z1 = z_coords[i], z_coords[i + 1]
+        n_segments = len(x0)
 
-            y_mid = (y0 + y1) / 2
-            t_y = (y_mid - y_min) / (y_max - y_min) if y_max > y_min else 0.5
+        # Vectorized threshold checking
+        below_0 = z0 < z_split_val
+        below_1 = z1 < z_split_val
+        same_side = below_0 == below_1
+        cross_mask = ~same_side
 
-            below_0 = z0 < z_split_val
-            below_1 = z1 < z_split_val
+        # Count segments (crossing segments produce 2 each)
+        n_cross = np.sum(cross_mask)
+        n_same = n_segments - n_cross
+        total_output = n_same + 2 * n_cross
 
-            if below_0 == below_1:
-                # Entire segment on one side - use midpoint for color
-                cmap = cmap_y_below if below_0 else cmap_y_above
-                all_segments.append([(x0, y0, z0), (x1, y1, z1)])
-                all_colors.append(cmap(t_y))
-            else:
-                # Segment crosses threshold - interpolate crossing point
-                t = (z_split_val - z0) / (z1 - z0)
-                x_cross = x0 + t * (x1 - x0)
-                y_cross = y0 + t * (y1 - y0)
-                z_cross = z_split_val
+        # Preallocate output arrays
+        segments = np.empty((total_output, 2, 3), dtype=np.float64)
+        colors = np.empty((total_output, 4), dtype=np.float64)
 
-                t_y1 = ((y0 + y_cross) / 2 - y_min) / (y_max - y_min)
-                t_y2 = ((y_cross + y1) / 2 - y_min) / (y_max - y_min)
+        # Process same-side segments
+        if n_same > 0:
+            same_idx = np.where(same_side)[0]
+            is_below = below_0[same_idx]
 
-                # Collect both segments with colors
-                if below_0:
-                    all_segments.append([(x0, y0, z0), (x_cross, y_cross, z_cross)])
-                    all_colors.append(cmap_y_below(t_y1))
-                    all_segments.append([(x_cross, y_cross, z_cross), (x1, y1, z1)])
-                    all_colors.append(cmap_y_above(t_y2))
-                else:
-                    all_segments.append([(x0, y0, z0), (x_cross, y_cross, z_cross)])
-                    all_colors.append(cmap_y_above(t_y1))
-                    all_segments.append([(x_cross, y_cross, z_cross), (x1, y1, z1)])
-                    all_colors.append(cmap_y_below(t_y2))
+            # Compute t values based on Y position
+            y_mid = (y0[same_idx] + y1[same_idx]) / 2
+            t_y = (y_mid - y_min) / y_range
 
-    # Collect all segments using pre-converted arrays
-    for i in range(X_arr.shape[0]):
-        collect_x_line_segments(X_arr[i, :], Y_arr[i, :], Z_arr[i, :])
-    for j in range(X_arr.shape[1]):
-        collect_y_line_segments(X_arr[:, j], Y_arr[:, j], Z_arr[:, j])
+            # Get colors from appropriate colormaps
+            colors_below = cmap_y_below(t_y)
+            colors_above = cmap_y_above(t_y)
+            same_colors = np.where(is_below[:, np.newaxis], colors_below, colors_above)
+
+            # Build segments
+            segments[:n_same, 0, 0] = x0[same_idx]
+            segments[:n_same, 0, 1] = y0[same_idx]
+            segments[:n_same, 0, 2] = z0[same_idx]
+            segments[:n_same, 1, 0] = x1[same_idx]
+            segments[:n_same, 1, 1] = y1[same_idx]
+            segments[:n_same, 1, 2] = z1[same_idx]
+            colors[:n_same] = same_colors
+
+        # Process crossing segments
+        if n_cross > 0:
+            cross_idx = np.where(cross_mask)[0]
+            x0_c, x1_c = x0[cross_idx], x1[cross_idx]
+            y0_c, y1_c = y0[cross_idx], y1[cross_idx]
+            z0_c, z1_c = z0[cross_idx], z1[cross_idx]
+            below_0_c = below_0[cross_idx]
+
+            # Calculate crossing points
+            t = (z_split_val - z0_c) / (z1_c - z0_c)
+            x_cross = x0_c + t * (x1_c - x0_c)
+            y_cross = y0_c + t * (y1_c - y0_c)
+
+            # Compute t values for Y position
+            t_y1 = ((y0_c + y_cross) / 2 - y_min) / y_range
+            t_y2 = ((y_cross + y1_c) / 2 - y_min) / y_range
+
+            # First sub-segment colors
+            colors_1_below = cmap_y_below(t_y1)
+            colors_1_above = cmap_y_above(t_y1)
+            cross_colors_1 = np.where(
+                below_0_c[:, np.newaxis], colors_1_below, colors_1_above
+            )
+
+            # Second sub-segment colors (opposite side)
+            colors_2_below = cmap_y_below(t_y2)
+            colors_2_above = cmap_y_above(t_y2)
+            cross_colors_2 = np.where(
+                ~below_0_c[:, np.newaxis], colors_2_below, colors_2_above
+            )
+
+            # Build crossing segments
+            base_idx = n_same
+            for i in range(n_cross):
+                idx1 = base_idx + 2 * i
+                idx2 = base_idx + 2 * i + 1
+
+                segments[idx1, 0] = [x0_c[i], y0_c[i], z0_c[i]]
+                segments[idx1, 1] = [x_cross[i], y_cross[i], z_split_val]
+                colors[idx1] = cross_colors_1[i]
+
+                segments[idx2, 0] = [x_cross[i], y_cross[i], z_split_val]
+                segments[idx2, 1] = [x1_c[i], y1_c[i], z1_c[i]]
+                colors[idx2] = cross_colors_2[i]
+
+        return segments, colors
+
+    # Process X-direction and Y-direction segments
+    x_segments, x_colors = process_x_direction_segments(X, Y, Z)
+    y_segments, y_colors = process_y_direction_segments(X, Y, Z)
+
+    # Combine all segments
+    all_segments = np.concatenate([x_segments, y_segments], axis=0)
+    all_colors = np.concatenate([x_colors, y_colors], axis=0)
 
     # Create a single Line3DCollection for all segments
     line_collection = Line3DCollection(all_segments, colors=all_colors, linewidths=1.5)
