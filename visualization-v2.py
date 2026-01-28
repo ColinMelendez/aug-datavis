@@ -12,6 +12,26 @@ from matplotlib.collections import PolyCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 
+def depth_sort_segments(segments, colors, ax):
+    """Sort segments by distance from camera (back-to-front)."""
+    elev = np.deg2rad(ax.elev)
+    azim = np.deg2rad(ax.azim)
+
+    # Camera direction vector (pointing toward the camera)
+    cam_dir = np.array(
+        [np.cos(elev) * np.cos(azim), np.cos(elev) * np.sin(azim), np.sin(elev)]
+    )
+
+    # Compute centroid of each segment and project onto camera direction
+    centroids = segments.mean(axis=1)
+    depths = centroids @ cam_dir
+
+    # Sort back-to-front (farthest first, so they get drawn first/behind)
+    sort_idx = np.argsort(depths)
+
+    return segments[sort_idx], colors[sort_idx]
+
+
 def plot_data(
     X,
     Y,
@@ -23,6 +43,8 @@ def plot_data(
     cmap_x_above=cm.Oranges,
     cmap_y_below=cm.Blues,
     cmap_y_above=cm.Reds,
+    enable_depth_sort=True,
+    line_width=1.5,
 ):
     """
     Create a 3D wireframe plot with color zones split at a percentage of the z-axis.
@@ -193,9 +215,25 @@ def plot_data(
     all_segments = np.concatenate([x_segments, y_segments], axis=0)
     all_colors = np.concatenate([x_colors, y_colors], axis=0)
 
+    # Apply depth sorting to the first/static renders
+    sorted_segments, sorted_colors = depth_sort_segments(all_segments, all_colors, ax)
+
     # Create a single Line3DCollection for all segments
-    line_collection = Line3DCollection(all_segments, colors=all_colors, linewidths=1.5)
+    line_collection = Line3DCollection(
+        sorted_segments, colors=sorted_colors, linewidths=line_width
+    )
     ax.add_collection3d(line_collection)
+
+    # Set up dynamic depth sorting on view changes
+    if enable_depth_sort:
+
+        def on_draw(_event):
+            nonlocal all_segments, all_colors
+            sorted_segs, sorted_cols = depth_sort_segments(all_segments, all_colors, ax)
+            line_collection.set_segments(sorted_segs)
+            line_collection.set_colors(sorted_cols)
+
+        fig.canvas.mpl_connect("draw_event", on_draw)
 
     # Set axis limits
     ax.set_xlim(X.min(), X.max())
@@ -274,27 +312,26 @@ def plot_data(
     return fig, ax
 
 
-# Generate data for parallel cosine curves with more diverse shapes
-x = np.linspace(-2, 2, 100)
-y = np.linspace(-2, 2, 100)
+# Generate sample data
+x = np.linspace(-2, 2, 50)
+y = np.linspace(-2, 2, 50)
 X, Y = np.meshgrid(x, y)
 
-# Amplitude scaling factor: starts small on left, grows toward right
-# Maps X from [-2, 2] to [0.3, 1.0]
 amplitude_scale = 0.3 + 0.7 * (X - x.min()) / (x.max() - x.min())
-
-# Create cosine curves with amplitude that grows along X
 Z = amplitude_scale * (
     np.cos(2 * np.pi * X) * (1 + 0.3 * Y)
     + 0.6 * np.cos(1.5 * np.pi * Y + 0.5 * X)
     + 0.3 * np.sin(3 * X * Y)
 )
 
-print(f"Data shapes - X: {X.shape}, Y: {Y.shape}, Z: {Z.shape}")
-print(f"Z range: {Z.min():.2f} to {Z.max():.2f}")
-print(
-    f"Amplitude scale range: {amplitude_scale.min():.2f} to {amplitude_scale.max():.2f}"
-)
-
-# Call the plotting function
 fig, ax = plot_data(X, Y, Z)
+
+
+# ------------------------------------------------------------
+
+# Simple lines data
+X_simple = np.array([[0, 1], [0, 1]])
+Y_simple = np.array([[0, 0], [1, 1]])
+Z_simple = np.array([[0, 1], [1, 0]])
+
+fig, ax = plot_data(X_simple, Y_simple, Z_simple)
