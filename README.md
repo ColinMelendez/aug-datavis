@@ -1,5 +1,11 @@
 # Data Visualization Experiments
 
+<p align="center">
+  <img width="900" alt="image" src="https://github.com/user-attachments/assets/eea20e1a-e122-41ec-9e62-36136b1f5333" />
+</p>
+
+
+
 Some experiments with 3d wireframe data visualizations for a project.
 
 Scripts and notebooks are not modular at the moment, but the actual plotting logic in them
