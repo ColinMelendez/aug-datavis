@@ -42,7 +42,12 @@ def plot_data(
     print(f"Z-axis range: {z_min:.2f} to {z_max:.2f}")
     print(f"{z_split_pct * 100:.0f}% split point: z = {z_split_val:.2f}")
 
-    # Collect all segments and colors for batch rendering
+    # Convert main arrays once
+    X_arr = np.asarray(X)
+    Y_arr = np.asarray(Y)
+    Z_arr = np.asarray(Z)
+
+    # Pre-allocate arrays for segments and colors
     all_segments = []
     all_colors = []
 
@@ -89,6 +94,8 @@ def plot_data(
         """
         Collect Y-direction line segments with colors.
         """
+        # Arrays are already converted to numpy at function start
+
         for i in range(len(y_coords) - 1):
             x0, x1 = x_coords[i], x_coords[i + 1]
             y0, y1 = y_coords[i], y_coords[i + 1]
@@ -127,11 +134,11 @@ def plot_data(
                     all_segments.append([(x_cross, y_cross, z_cross), (x1, y1, z1)])
                     all_colors.append(cmap_y_below(t_y2))
 
-    # Collect all segments
-    for i in range(X.shape[0]):
-        collect_x_line_segments(X[i, :], Y[i, :], Z[i, :])
-    for j in range(X.shape[1]):
-        collect_y_line_segments(X[:, j], Y[:, j], Z[:, j])
+    # Collect all segments using pre-converted arrays
+    for i in range(X_arr.shape[0]):
+        collect_x_line_segments(X_arr[i, :], Y_arr[i, :], Z_arr[i, :])
+    for j in range(X_arr.shape[1]):
+        collect_y_line_segments(X_arr[:, j], Y_arr[:, j], Z_arr[:, j])
 
     # Create a single Line3DCollection for all segments
     line_collection = Line3DCollection(all_segments, colors=all_colors, linewidths=1.5)
@@ -152,10 +159,8 @@ def plot_data(
         pad=20,
     )
 
-    # Add a horizontal plane indicator at the split point
-    verts = [
-        [(X.min(), Y.min()), (X.max(), Y.min()), (X.max(), Y.max()), (X.min(), Y.max())]
-    ]
+    # Add a horizontal plane indicator at the split point (using cached values)
+    verts = [[(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]]
     plane = PolyCollection(verts, alpha=0.15, facecolors="gray", edgecolors="none")
     ax.add_collection3d(plane, zs=z_split_val, zdir="z")
 
