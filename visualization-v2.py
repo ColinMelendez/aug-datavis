@@ -313,8 +313,8 @@ def plot_data(
 
 
 # Generate sample data
-x = np.linspace(-2, 2, 50)
-y = np.linspace(-2, 2, 50)
+x = np.linspace(-2, 2, 100)
+y = np.linspace(-2, 2, 100)
 X, Y = np.meshgrid(x, y)
 
 amplitude_scale = 0.3 + 0.7 * (X - x.min()) / (x.max() - x.min())
@@ -325,13 +325,3 @@ Z = amplitude_scale * (
 )
 
 fig, ax = plot_data(X, Y, Z)
-
-
-# ------------------------------------------------------------
-
-# Simple lines data
-X_simple = np.array([[0, 1], [0, 1]])
-Y_simple = np.array([[0, 0], [1, 1]])
-Z_simple = np.array([[0, 1], [1, 0]])
-
-fig, ax = plot_data(X_simple, Y_simple, Z_simple)

@@ -12,6 +12,26 @@ from matplotlib.colors import LinearSegmentedColormap
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 
+def depth_sort_segments(segments, colors, ax):
+    """Sort segments by distance from camera (back-to-front)."""
+    elev = np.deg2rad(ax.elev)
+    azim = np.deg2rad(ax.azim)
+
+    # Camera direction vector (pointing toward the camera)
+    cam_dir = np.array(
+        [np.cos(elev) * np.cos(azim), np.cos(elev) * np.sin(azim), np.sin(elev)]
+    )
+
+    # Compute centroid of each segment and project onto camera direction
+    centroids = segments.mean(axis=1)
+    depths = centroids @ cam_dir
+
+    # Sort back-to-front (farthest first, so they get drawn first/behind)
+    sort_idx = np.argsort(depths)
+
+    return segments[sort_idx], colors[sort_idx]
+
+
 def plot_data(
     X,
     Y,
@@ -21,6 +41,8 @@ def plot_data(
     cmap_x_above=LinearSegmentedColormap.from_list("custom", ["#FFD700", "#DC143C"]),
     cmap_y_below=LinearSegmentedColormap.from_list("custom", ["#7FFF00", "#006400"]),
     cmap_y_above=LinearSegmentedColormap.from_list("custom", ["#FFA07A", "#FF4500"]),
+    enable_depth_sort=True,
+    line_width=1.5,
 ):
     """
     Create a 3D wireframe plot with color zones split at a percentage of the z-axis.
@@ -177,9 +199,25 @@ def plot_data(
     all_segments = np.concatenate([x_segments, y_segments], axis=0)
     all_colors = np.concatenate([x_colors, y_colors], axis=0)
 
+    # Apply depth sorting to the first/static renders
+    sorted_segments, sorted_colors = depth_sort_segments(all_segments, all_colors, ax)
+
     # Create a single Line3DCollection for all segments
-    line_collection = Line3DCollection(all_segments, colors=all_colors, linewidths=1.5)
+    line_collection = Line3DCollection(
+        sorted_segments, colors=sorted_colors, linewidths=line_width
+    )
     ax.add_collection3d(line_collection)
+
+    # Set up dynamic depth sorting on view changes
+    if enable_depth_sort:
+
+        def on_draw(_event):
+            nonlocal all_segments, all_colors
+            sorted_segs, sorted_cols = depth_sort_segments(all_segments, all_colors, ax)
+            line_collection.set_segments(sorted_segs)
+            line_collection.set_colors(sorted_cols)
+
+        fig.canvas.mpl_connect("draw_event", on_draw)
 
     # Set axis limits (using cached values)
     ax.set_xlim(x_min, x_max)
