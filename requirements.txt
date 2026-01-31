@@ -54,6 +54,7 @@ matplotlib-inline==0.2.1
 mdurl==0.1.2
 monotonic==1.6
 multidict==6.0.5
+narwhals==2.15.0
 nltk==3.8.1
 numpy==2.4.1
 open-interpreter==0.2.5
@@ -63,6 +64,7 @@ packaging==26.0
 parso==0.8.5
 pexpect==4.9.0
 pillow==12.1.0
+plotly==6.5.2
 posthog==3.5.0
 prompt_toolkit==3.0.52
 ptyprocess==0.7.0

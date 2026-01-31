@@ -4,8 +4,6 @@
   <img width="900" alt="image" src="https://github.com/user-attachments/assets/eea20e1a-e122-41ec-9e62-36136b1f5333" />
 </p>
 
-
-
 Some experiments with 3d wireframe data visualizations for a project.
 
 Scripts and notebooks are not modular at the moment, but the actual plotting logic in them
@@ -19,6 +17,14 @@ is wrapped in functions that can be easily extracted.
 - Or, manually: `pip` and `python` >= 3.14
 
 The flake also includes a linter/formatter (Ruff) and typechecker (BasedPyright) but these are optional (though recommended).
+
+Running
+
+```bash
+nix develop
+```
+
+will automatically stat the virtual environment inside the resulting nix shell.
 
 ### Running
 
@@ -34,3 +40,8 @@ and then run any of the scripts or notebooks
 # for example
 python visualization-2.py
 ```
+
+### Development
+
+Dependencies can be added with the standard `pip` workflows and pinned to `requirements.txt`
+while still working properly with the nix setup.
