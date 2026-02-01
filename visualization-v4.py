@@ -2,84 +2,58 @@ import numpy as np
 import plotly.graph_objects as go
 
 
-def create_solid_color_segments(X_arr, Y_arr, Z_arr, axis, z_split_val):
+def create_split_segments(X_arr, Y_arr, Z_arr, axis, z_split_val):
     """
-    Create simplified line segments that are split at the boundary.
-    Returns 4 lists of coordinates for different color combinations:
-    - x_below, y_below, z_below: lines below the split plane
-    - x_above, y_above, z_above: lines above the split plane
+    Create line segments split at the boundary into below/above groups.
+    Returns two tuples: (below_x, below_y, below_z), (above_x, above_y, above_z)
+    Each with None separators for Plotly.
     """
-    # axis=1 for X-direction (along columns), axis=0 for Y-direction (along rows)
     if axis == 1:
-        # X-direction: shape (rows, cols) -> segments along cols
-        x0 = X_arr[:, :-1].ravel()
-        x1 = X_arr[:, 1:].ravel()
-        y0 = Y_arr[:, :-1].ravel()
-        y1 = Y_arr[:, 1:].ravel()
-        z0 = Z_arr[:, :-1].ravel()
-        z1 = Z_arr[:, 1:].ravel()
+        x0, x1 = X_arr[:, :-1].ravel(), X_arr[:, 1:].ravel()
+        y0, y1 = Y_arr[:, :-1].ravel(), Y_arr[:, 1:].ravel()
+        z0, z1 = Z_arr[:, :-1].ravel(), Z_arr[:, 1:].ravel()
     else:
-        # Y-direction: shape (rows, cols) -> segments along rows
-        x0 = X_arr[:-1, :].ravel()
-        x1 = X_arr[1:, :].ravel()
-        y0 = Y_arr[:-1, :].ravel()
-        y1 = Y_arr[1:, :].ravel()
-        z0 = Z_arr[:-1, :].ravel()
-        z1 = Z_arr[1:, :].ravel()
+        x0, x1 = X_arr[:-1, :].ravel(), X_arr[1:, :].ravel()
+        y0, y1 = Y_arr[:-1, :].ravel(), Y_arr[1:, :].ravel()
+        z0, z1 = Z_arr[:-1, :].ravel(), Z_arr[1:, :].ravel()
 
-    # Initialize coordinate lists for below and above segments
-    below_coords = {"x": [], "y": [], "z": []}
-    above_coords = {"x": [], "y": [], "z": []}
-
-    # Check which segments cross the boundary
     below_0 = z0 < z_split_val
     below_1 = z1 < z_split_val
-    same_side = below_0 == below_1
-    cross_mask = ~same_side
+    crosses = below_0 != below_1
 
-    # Process segments that don't cross the boundary
-    same_idx = np.where(same_side)[0]
-    for idx in same_idx:
-        if below_0[idx]:  # Both points are below
-            below_coords["x"].extend([x0[idx], x1[idx], None])
-            below_coords["y"].extend([y0[idx], y1[idx], None])
-            below_coords["z"].extend([z0[idx], z1[idx], None])
-        else:  # Both points are above
-            above_coords["x"].extend([x0[idx], x1[idx], None])
-            above_coords["y"].extend([y0[idx], y1[idx], None])
-            above_coords["z"].extend([z0[idx], z1[idx], None])
+    t = np.where(crosses, (z_split_val - z0) / (z1 - z0), 0)
+    x_cross, y_cross = x0 + t * (x1 - x0), y0 + t * (y1 - y0)
 
-    # Process segments that cross the boundary
-    cross_idx = np.where(cross_mask)[0]
-    if len(cross_idx) > 0:
-        x0_c, x1_c = x0[cross_idx], x1[cross_idx]
-        y0_c, y1_c = y0[cross_idx], y1[cross_idx]
-        z0_c, z1_c = z0[cross_idx], z1[cross_idx]
+    below = {"x": [], "y": [], "z": []}
+    above = {"x": [], "y": [], "z": []}
 
-        # Calculate crossing points using linear interpolation
-        t = (z_split_val - z0_c) / (z1_c - z0_c)
-        x_cross = x0_c + t * (x1_c - x0_c)
-        y_cross = y0_c + t * (y1_c - y0_c)
+    for i in range(len(x0)):
+        if crosses[i]:
+            # Split at intersection - one segment below, one above
+            if below_0[i]:  # starts below, ends above
+                below["x"].extend([x0[i], x_cross[i], None])
+                below["y"].extend([y0[i], y_cross[i], None])
+                below["z"].extend([z0[i], z_split_val, None])
+                above["x"].extend([x_cross[i], x1[i], None])
+                above["y"].extend([y_cross[i], y1[i], None])
+                above["z"].extend([z_split_val, z1[i], None])
+            else:  # starts above, ends below
+                above["x"].extend([x0[i], x_cross[i], None])
+                above["y"].extend([y0[i], y_cross[i], None])
+                above["z"].extend([z0[i], z_split_val, None])
+                below["x"].extend([x_cross[i], x1[i], None])
+                below["y"].extend([y_cross[i], y1[i], None])
+                below["z"].extend([z_split_val, z1[i], None])
+        elif below_0[i]:  # both below
+            below["x"].extend([x0[i], x1[i], None])
+            below["y"].extend([y0[i], y1[i], None])
+            below["z"].extend([z0[i], z1[i], None])
+        else:  # both above
+            above["x"].extend([x0[i], x1[i], None])
+            above["y"].extend([y0[i], y1[i], None])
+            above["z"].extend([z0[i], z1[i], None])
 
-        # Split each crossing segment into two non-crossing segments
-        for i in range(len(cross_idx)):
-            # First segment (from starting point to boundary)
-            if below_0[cross_idx[i]]:  # Starts below, goes above
-                below_coords["x"].extend([x0_c[i], x_cross[i], None])
-                below_coords["y"].extend([y0_c[i], y_cross[i], None])
-                below_coords["z"].extend([z0_c[i], z_split_val, None])
-                above_coords["x"].extend([x_cross[i], x1_c[i], None])
-                above_coords["y"].extend([y_cross[i], y1_c[i], None])
-                above_coords["z"].extend([z_split_val, z1_c[i], None])
-            else:  # Starts above, goes below
-                above_coords["x"].extend([x0_c[i], x_cross[i], None])
-                above_coords["y"].extend([y0_c[i], y_cross[i], None])
-                above_coords["z"].extend([z0_c[i], z_split_val, None])
-                below_coords["x"].extend([x_cross[i], x1_c[i], None])
-                below_coords["y"].extend([y_cross[i], y1_c[i], None])
-                below_coords["z"].extend([z_split_val, z1_c[i], None])
-
-    return below_coords, above_coords
+    return below, above
 
 
 def plot_data(
@@ -87,17 +61,19 @@ def plot_data(
     Y,
     Z,
     z_split_pct=0.6,
-    line_width=3,
+    line_width=2,
 ):
     """
-    Create a 3D wireframe plot with solid colors split at a percentage of z-axis using Plotly.
+    Create a 3D wireframe plot with gradient colors split at a percentage of z-axis using Plotly.
 
-    Uses 4 solid colors: X-direction (green/orange), Y-direction (blue/red) below/above boundary.
+    Segments are physically split at the boundary plane, then each region gets its own gradient:
+    - X-direction: darkgreen→limegreen below, orange→red above
+    - Y-direction: darkblue→cyan below, gold→magenta above
 
     Parameters:
         X, Y, Z: 2D arrays from meshgrid defining the surface
         z_split_pct: percentage (0-1) along z-axis where color changes (default 0.6)
-        line_width: width of the lines (default 3)
+        line_width: width of the lines (default 2)
     """
     # Calculate split values
     z_min, z_max = Z.min(), Z.max()
@@ -108,68 +84,86 @@ def plot_data(
     print(f"Z-axis range: {z_min:.2f} to {z_max:.2f}")
     print(f"{z_split_pct * 100:.0f}% split point: z = {z_split_val:.2f}")
 
-    # Process X-direction and Y-direction segments
-    x_below, x_above = create_solid_color_segments(
-        X, Y, Z, axis=1, z_split_val=z_split_val
-    )
-    y_below, y_above = create_solid_color_segments(
-        X, Y, Z, axis=0, z_split_val=z_split_val
-    )
+    # Process X-direction and Y-direction segments, split at boundary
+    x_below, x_above = create_split_segments(X, Y, Z, axis=1, z_split_val=z_split_val)
+    y_below, y_above = create_split_segments(X, Y, Z, axis=0, z_split_val=z_split_val)
+
+    # Colorscales for each region (gradient within each)
+    x_below_colorscale = [[0, "darkgreen"], [1, "limegreen"]]
+    x_above_colorscale = [[0, "orange"], [1, "red"]]
+    y_below_colorscale = [[0, "darkblue"], [1, "cyan"]]
+    y_above_colorscale = [[0, "gold"], [1, "magenta"]]
+
+    def make_colors(z_list):
+        """Replace None with z_min for color array."""
+        return [z if z is not None else z_min for z in z_list]
 
     # Create Plotly figure
     fig = go.Figure()
 
-    # Add 4 solid color traces for different direction/boundary combinations
-    if len(x_below["x"]) > 0:
+    # Add 4 traces: X-below, X-above, Y-below, Y-above
+    if x_below["x"]:
         fig.add_trace(
             go.Scatter3d(
-                x=x_below["x"],
-                y=x_below["y"],
-                z=x_below["z"],
+                x=x_below["x"], y=x_below["y"], z=x_below["z"],
                 mode="lines",
-                line=dict(color="green", width=line_width),
+                line=dict(
+                    color=make_colors(x_below["z"]),
+                    colorscale=x_below_colorscale,
+                    width=line_width,
+                    cmin=z_min, cmax=z_split_val,
+                ),
                 name="X-direction (below)",
                 showlegend=True,
                 hoverinfo="none",
             )
         )
 
-    if len(x_above["x"]) > 0:
+    if x_above["x"]:
         fig.add_trace(
             go.Scatter3d(
-                x=x_above["x"],
-                y=x_above["y"],
-                z=x_above["z"],
+                x=x_above["x"], y=x_above["y"], z=x_above["z"],
                 mode="lines",
-                line=dict(color="orange", width=line_width),
+                line=dict(
+                    color=make_colors(x_above["z"]),
+                    colorscale=x_above_colorscale,
+                    width=line_width,
+                    cmin=z_split_val, cmax=z_max,
+                ),
                 name="X-direction (above)",
                 showlegend=True,
                 hoverinfo="none",
             )
         )
 
-    if len(y_below["x"]) > 0:
+    if y_below["x"]:
         fig.add_trace(
             go.Scatter3d(
-                x=y_below["x"],
-                y=y_below["y"],
-                z=y_below["z"],
+                x=y_below["x"], y=y_below["y"], z=y_below["z"],
                 mode="lines",
-                line=dict(color="blue", width=line_width),
+                line=dict(
+                    color=make_colors(y_below["z"]),
+                    colorscale=y_below_colorscale,
+                    width=line_width,
+                    cmin=z_min, cmax=z_split_val,
+                ),
                 name="Y-direction (below)",
                 showlegend=True,
                 hoverinfo="none",
             )
         )
 
-    if len(y_above["x"]) > 0:
+    if y_above["x"]:
         fig.add_trace(
             go.Scatter3d(
-                x=y_above["x"],
-                y=y_above["y"],
-                z=y_above["z"],
+                x=y_above["x"], y=y_above["y"], z=y_above["z"],
                 mode="lines",
-                line=dict(color="red", width=line_width),
+                line=dict(
+                    color=make_colors(y_above["z"]),
+                    colorscale=y_above_colorscale,
+                    width=line_width,
+                    cmin=z_split_val, cmax=z_max,
+                ),
                 name="Y-direction (above)",
                 showlegend=True,
                 hoverinfo="none",
@@ -208,7 +202,7 @@ def plot_data(
     # Update layout
     fig.update_layout(
         title={
-            "text": f"3D Wireframe with Solid Colors<br>Color split at {z_split_pct * 100:.0f}% Z-axis",
+            "text": f"3D Wireframe with Split Gradients<br>Split at {z_split_pct * 100:.0f}% Z-axis",
             "x": 0.5,
             "xanchor": "center",
             "font": {"size": 14},
@@ -229,7 +223,6 @@ def plot_data(
     )
 
     # Show the plot
-    print(" Using Plotly backend with WebGL rendering")
     fig.show()
 
     # Return figure for any further manipulation
