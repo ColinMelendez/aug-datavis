@@ -62,13 +62,15 @@ def plot_data(
     Z,
     z_split_pct=0.6,
     line_width=2,
+    x_below_colorscale=[[0, "lightgreen"], [1, "darkblue"]],
+    x_above_colorscale=[[0, "orange"], [1, "red"]],
+    y_below_colorscale=[[0, "darkblue"], [1, "cyan"]],
+    y_above_colorscale=[[0, "gold"], [1, "magenta"]],
 ):
     """
     Create a 3D wireframe plot with gradient colors split at a percentage of z-axis using Plotly.
 
-    Segments are physically split at the boundary plane, then each region gets its own gradient:
-    - X-direction: darkgreen→limegreen below, orange→red above
-    - Y-direction: darkblue→cyan below, gold→magenta above
+    Segments are physically split at the boundary plane, then each region gets its own gradient.
 
     Parameters:
         X, Y, Z: 2D arrays from meshgrid defining the surface
@@ -88,13 +90,7 @@ def plot_data(
     x_below, x_above = create_split_segments(X, Y, Z, axis=1, z_split_val=z_split_val)
     y_below, y_above = create_split_segments(X, Y, Z, axis=0, z_split_val=z_split_val)
 
-    # Colorscales for each region (gradient within each)
-    x_below_colorscale = [[0, "darkgreen"], [1, "limegreen"]]
-    x_above_colorscale = [[0, "orange"], [1, "red"]]
-    y_below_colorscale = [[0, "darkblue"], [1, "cyan"]]
-    y_above_colorscale = [[0, "gold"], [1, "magenta"]]
-
-    def make_colors(z_list):
+    def filter_unused(z_list):
         """Replace None with z_min for color array."""
         return [z if z is not None else z_min for z in z_list]
 
@@ -102,16 +98,42 @@ def plot_data(
     fig = go.Figure()
 
     # Add 4 traces: X-below, X-above, Y-below, Y-above
+    # Each config: (coords, colorscale, cmin, cmax, name)
     trace_configs = [
-        (x_below, x_below_colorscale, z_min, z_split_val, "X-direction (below)"),
-        (x_above, x_above_colorscale, z_split_val, z_max, "X-direction (above)"),
-        (y_below, y_below_colorscale, z_min, z_split_val, "Y-direction (below)"),
-        (y_above, y_above_colorscale, z_split_val, z_max, "Y-direction (above)"),
+        (
+            x_below,
+            x_below_colorscale,
+            z_min,
+            z_split_val,
+            "X-direction (below)",
+        ),
+        (
+            x_above,
+            x_above_colorscale,
+            z_split_val,
+            z_max,
+            "X-direction (above)",
+        ),
+        (
+            y_below,
+            y_below_colorscale,
+            z_min,
+            z_split_val,
+            "Y-direction (below)",
+        ),
+        (
+            y_above,
+            y_above_colorscale,
+            z_split_val,
+            z_max,
+            "Y-direction (above)",
+        ),
     ]
 
     for coords, colorscale, cmin, cmax, name in trace_configs:
         if not coords["x"]:
             continue
+        # Add the line trace (hidden from legend)
         fig.add_trace(
             go.Scatter3d(
                 x=coords["x"],
@@ -119,17 +141,31 @@ def plot_data(
                 z=coords["z"],
                 mode="lines",
                 line=dict(
-                    color=make_colors(coords["z"]),
+                    color=filter_unused(coords["z"]),
                     colorscale=colorscale,
                     width=line_width,
                     cmin=cmin,
                     cmax=cmax,
                 ),
                 name=name,
+                legendgroup=name,
                 showlegend=True,
                 hoverinfo="none",
             )
         )
+        # Add legend-only trace with midpoint color marker so we can control the color separately
+        # fig.add_trace(
+        #     go.Scatter3d(
+        #         x=[None],
+        #         y=[None],
+        #         z=[None],
+        #         mode="markers",
+        #         marker=dict(size=10, colorscale=colorscale, symbol="square"),
+        #         name=name,
+        #         legendgroup=name,
+        #         showlegend=True,
+        #     )
+        # )
 
     # Update layout
     fig.update_layout(
