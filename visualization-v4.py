@@ -102,102 +102,34 @@ def plot_data(
     fig = go.Figure()
 
     # Add 4 traces: X-below, X-above, Y-below, Y-above
-    if x_below["x"]:
+    trace_configs = [
+        (x_below, x_below_colorscale, z_min, z_split_val, "X-direction (below)"),
+        (x_above, x_above_colorscale, z_split_val, z_max, "X-direction (above)"),
+        (y_below, y_below_colorscale, z_min, z_split_val, "Y-direction (below)"),
+        (y_above, y_above_colorscale, z_split_val, z_max, "Y-direction (above)"),
+    ]
+
+    for coords, colorscale, cmin, cmax, name in trace_configs:
+        if not coords["x"]:
+            continue
         fig.add_trace(
             go.Scatter3d(
-                x=x_below["x"], y=x_below["y"], z=x_below["z"],
+                x=coords["x"],
+                y=coords["y"],
+                z=coords["z"],
                 mode="lines",
                 line=dict(
-                    color=make_colors(x_below["z"]),
-                    colorscale=x_below_colorscale,
+                    color=make_colors(coords["z"]),
+                    colorscale=colorscale,
                     width=line_width,
-                    cmin=z_min, cmax=z_split_val,
+                    cmin=cmin,
+                    cmax=cmax,
                 ),
-                name="X-direction (below)",
+                name=name,
                 showlegend=True,
                 hoverinfo="none",
             )
         )
-
-    if x_above["x"]:
-        fig.add_trace(
-            go.Scatter3d(
-                x=x_above["x"], y=x_above["y"], z=x_above["z"],
-                mode="lines",
-                line=dict(
-                    color=make_colors(x_above["z"]),
-                    colorscale=x_above_colorscale,
-                    width=line_width,
-                    cmin=z_split_val, cmax=z_max,
-                ),
-                name="X-direction (above)",
-                showlegend=True,
-                hoverinfo="none",
-            )
-        )
-
-    if y_below["x"]:
-        fig.add_trace(
-            go.Scatter3d(
-                x=y_below["x"], y=y_below["y"], z=y_below["z"],
-                mode="lines",
-                line=dict(
-                    color=make_colors(y_below["z"]),
-                    colorscale=y_below_colorscale,
-                    width=line_width,
-                    cmin=z_min, cmax=z_split_val,
-                ),
-                name="Y-direction (below)",
-                showlegend=True,
-                hoverinfo="none",
-            )
-        )
-
-    if y_above["x"]:
-        fig.add_trace(
-            go.Scatter3d(
-                x=y_above["x"], y=y_above["y"], z=y_above["z"],
-                mode="lines",
-                line=dict(
-                    color=make_colors(y_above["z"]),
-                    colorscale=y_above_colorscale,
-                    width=line_width,
-                    cmin=z_split_val, cmax=z_max,
-                ),
-                name="Y-direction (above)",
-                showlegend=True,
-                hoverinfo="none",
-            )
-        )
-
-    # Add split plane using a mesh
-    xx, yy = np.meshgrid([x_min, x_max], [y_min, y_max])
-    zz = np.ones_like(xx) * z_split_val
-
-    fig.add_trace(
-        go.Mesh3d(
-            x=xx,
-            y=yy,
-            z=zz,
-            opacity=0.15,
-            color="lightgray",
-            name="Split plane",
-            showlegend=False,
-        )
-    )
-
-    # Add split plane trace for legend
-    fig.add_trace(
-        go.Scatter3d(
-            x=[None],
-            y=[None],
-            z=[None],
-            mode="markers",
-            marker=dict(size=10, color="gray", opacity=0.3),
-            name=f"{z_split_pct * 100:.0f}% Z split plane",
-            showlegend=True,
-        )
-    )
 
     # Update layout
     fig.update_layout(
